@@ -9,6 +9,8 @@
 #define TEST_FAIL 1
 
 // Helper function to verify the content of the file
+// IMPORTANT: This uses standard C I/O (fopen, fgetc) to read the file
+// directly from disk and confirm the output of our buffered library.
 int verify_file_content(const char *expected_content) {
     FILE *fp = fopen(TEST_FILE, "r");
     if (!fp) {
@@ -57,9 +59,11 @@ int main() {
     const char *test1_data = "AAAABBBBCCCC"; // 12 bytes
     printf("\nTEST 1: Writing %zu bytes (should buffer).\n", strlen(test1_data));
     
+    // Custom Function Call: buffered_open
     buffered_file_t *bf = buffered_open(TEST_FILE, O_WRONLY | O_CREAT, 0644);
     if (!bf) return TEST_FAIL;
 
+    // Custom Function Call: buffered_write
     if (buffered_write(bf, test1_data, strlen(test1_data)) == -1) {
         perror("TEST 1 buffered_write failed");
         buffered_close(bf);
@@ -67,7 +71,7 @@ int main() {
     }
     printf("TEST 1: Successfully buffered. Closing to force flush...\n");
 
-    // Close forces flush
+    // Custom Function Call: buffered_close (forces flush)
     if (buffered_close(bf) == -1) {
         perror("TEST 1 buffered_close failed");
         return TEST_FAIL;
@@ -91,9 +95,11 @@ int main() {
     }
     large_data[large_size - 1] = 'X'; // Special char at the end
 
+    // Custom Function Call: buffered_open
     bf = buffered_open(TEST_FILE, O_WRONLY | O_CREAT, 0644);
     if (!bf) { free(large_data); return TEST_FAIL; }
 
+    // Custom Function Call: buffered_write (will trigger flush multiple times)
     if (buffered_write(bf, large_data, large_size) == -1) {
         perror("TEST 2 buffered_write failed");
         buffered_close(bf);
@@ -102,6 +108,7 @@ int main() {
     }
     printf("TEST 2: Successfully wrote %zu bytes. Closing...\n", large_size);
 
+    // Custom Function Call: buffered_close (forces final flush)
     if (buffered_close(bf) == -1) {
         perror("TEST 2 buffered_close failed");
         free(large_data);
@@ -122,14 +129,17 @@ int main() {
     const char *expected_3 = "Part A Part B Part C";
     printf("\nTEST 3: Multiple small writes, closing for final flush.\n");
     
+    // Custom Function Call: buffered_open
     bf = buffered_open(TEST_FILE, O_WRONLY | O_CREAT, 0644);
     if (!bf) return TEST_FAIL;
 
+    // Custom Function Calls: buffered_write
     if (buffered_write(bf, part_a, strlen(part_a)) == -1) goto fail_t3;
     if (buffered_write(bf, part_b, strlen(part_b)) == -1) goto fail_t3;
     if (buffered_write(bf, part_c, strlen(part_c)) == -1) goto fail_t3;
     
     printf("TEST 3: Successfully buffered all parts. Closing...\n");
+    // Custom Function Call: buffered_close (forces final flush)
     if (buffered_close(bf) == -1) {
         perror("TEST 3 buffered_close failed");
         return TEST_FAIL;
