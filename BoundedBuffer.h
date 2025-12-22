@@ -1,13 +1,13 @@
 #ifndef BB_H
 #define BB_H
-#include "ex4.h"
-class BB {
+#include "ass4.h"
+class BoundedBuffer {
 public:
-    BB(int size, bool dont_block = false);
+    BoundedBuffer(int size, bool dont_block = false);
     int produce(news_data src);
     void print_all();
     int consume(news_data *dst);
-    ~BB();
+    ~BoundedBuffer();
 private:
     int size;
     news_data *buffer;
