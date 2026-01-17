@@ -19,7 +19,7 @@ extern void forkret(void);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
-0
+
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -27,12 +27,11 @@ extern char trampoline[]; // trampoline.S
 struct spinlock wait_lock;
 
 
-long long findMinAccum(struct proc *skip){
+long long findMinAccum(void){
   struct proc *temp;
   long long min = -1;
+  
   for(temp = proc; temp < &proc[NPROC]; temp++){
-    if(temp == skip) 
-      continue;
     acquire(&temp->lock);
     if(temp->state == RUNNABLE || temp->state == RUNNING){
       if(min == -1 || temp->accumulator < min){
@@ -143,14 +142,22 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
-  // step 2
+  // --- FIX START ---
   p->ps_priority = 5;
-  long long min = findMinAccum(p);
-  if(min == -1){
-    min = 0;
-  }
-  p->accumulator = min;
 
+  // CRITICAL: Release the lock before scanning the table.
+  // 1. Prevents "panic: acquire" (recursive locking).
+  // 2. Prevents Deadlock with the scheduler.
+  release(&p->lock);
+  
+  long long min = findMinAccum();
+  
+  acquire(&p->lock);
+  // --- FIX END ---
+
+  // Handle the empty system case
+  if(min == -1) min = 0;
+  p->accumulator = min;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -167,8 +174,7 @@ found:
     return 0;
   }
 
-  // Set up new context to start executing at forkret,
-  // which returns to user space.
+  // Set up new context...
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
@@ -542,16 +548,12 @@ scheduler(void)
 
     // After the loop, did we find a champion?
     if(minP != 0) {
-        // minP->lock is still held from the loop!
-        minP->state = RUNNING;
-        c->proc = minP;
-        
-        swtch(&c->context, &minP->context);
-        
-        // Process is done running for now.
-        c->proc = 0;
-        release(&minP->lock);
-    } else {
+      minP->state = RUNNING;
+      c->proc = minP;
+      swtch(&c->context, &minP->context);
+      c->proc = 0;
+      release(&minP->lock);
+      } else {
         // No runnable processes found
         intr_on();
         asm volatile("wfi");
@@ -656,7 +658,7 @@ wakeup(void *chan)
 {
   struct proc *p;
   
-  long long min = findMinAccum(myproc());
+  long long min = findMinAccum();
   if(min == -1){
     min = 0;
   }
@@ -665,7 +667,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
-        p->accumulator = min;
+        p->accumulator = min;  // Reset per Rule B
       }
       release(&p->lock);
     }
